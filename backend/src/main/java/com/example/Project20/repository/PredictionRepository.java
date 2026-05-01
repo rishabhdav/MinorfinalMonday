@@ -4,26 +4,45 @@ import com.example.Project20.entity.Prediction;
 import com.example.Project20.entity.ReviewStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.mongodb.repository.MongoRepository;
 
+import java.util.List;
 import java.util.Optional;
 
-public interface PredictionRepository extends JpaRepository<Prediction, Long> {
+public interface PredictionRepository extends MongoRepository<Prediction, String> {
 
-    @Query("""
-            select p
-            from Prediction p
-            where p.user.username = :username
-              and (:reviewStatus is null or p.reviewStatus = :reviewStatus)
-              and (:modelName is null or lower(p.modelName) = lower(:modelName))
-            order by p.createdAt desc
-            """)
-    Page<Prediction> findUserHistory(@Param("username") String username,
-                                     @Param("modelName") String modelName,
-                                     @Param("reviewStatus") ReviewStatus reviewStatus,
-                                     Pageable pageable);
+    Page<Prediction> findByUsernameOrderByCreatedAtDesc(String username, Pageable pageable);
 
-    Optional<Prediction> findByIdAndUserUsername(Long id, String username);
+    Page<Prediction> findByUsernameAndModelNameIgnoreCaseOrderByCreatedAtDesc(String username, String modelName, Pageable pageable);
+
+    Page<Prediction> findByUsernameAndReviewStatusOrderByCreatedAtDesc(String username, ReviewStatus reviewStatus, Pageable pageable);
+
+    Page<Prediction> findByUsernameAndModelNameIgnoreCaseAndReviewStatusOrderByCreatedAtDesc(
+            String username,
+            String modelName,
+            ReviewStatus reviewStatus,
+            Pageable pageable
+    );
+
+    Optional<Prediction> findByIdAndUsername(String id, String username);
+
+    Page<Prediction> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    Page<Prediction> findByModelNameIgnoreCaseOrderByCreatedAtDesc(String modelName, Pageable pageable);
+
+    Page<Prediction> findByReviewStatusOrderByCreatedAtDesc(ReviewStatus reviewStatus, Pageable pageable);
+
+    Page<Prediction> findByModelNameIgnoreCaseAndReviewStatusOrderByCreatedAtDesc(
+            String modelName,
+            ReviewStatus reviewStatus,
+            Pageable pageable
+    );
+
+    List<Prediction> findByUsernameOrderByCreatedAtDesc(String username);
+
+    long countByUsername(String username);
+
+    long countByUsernameAndReviewStatus(String username, ReviewStatus reviewStatus);
+
+    long countByReviewStatus(ReviewStatus reviewStatus);
 }

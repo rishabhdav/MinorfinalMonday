@@ -42,16 +42,25 @@ function formatDate(value) {
 }
 
 function PredictionDashboard({ modelKey, modelName, title, description, accent = 'blue' }) {
-  const { getAuthHeaders } = useAuth();
+  const { getAuthHeaders, user } = useAuth();
   const [image, setImage] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [scope, setScope] = useState(user?.role === 'ADMIN' ? 'all' : 'mine');
   const styles = useMemo(() => ACCENT_STYLES[accent] || ACCENT_STYLES.blue, [accent]);
+  const canSeeAll = user?.role === 'ADMIN';
+  const [reviewDrafts, setReviewDrafts] = useState({});
+  const [emailDrafts, setEmailDrafts] = useState({});
+  const [savingReviewId, setSavingReviewId] = useState(null);
+  const [sendingEmailId, setSendingEmailId] = useState(null);
+
 
   useEffect(() => {
     if (!image) {
@@ -67,13 +76,20 @@ function PredictionDashboard({ modelKey, modelName, title, description, accent =
 
   useEffect(() => {
     fetchHistory();
-  }, []);
+    fetchStats();
+  }, [scope]);
+
+  // ensure admin users default to all scope
+  useEffect(() => {
+    if (user?.role === 'ADMIN' && scope !== 'all') setScope('all');
+    if (user && user.role !== 'ADMIN' && scope !== 'mine') setScope('mine');
+  }, [user]);
 
   const fetchHistory = async () => {
     setHistoryLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/predictions?page=0&size=12`, {
+      const response = await fetch(`${API_BASE_URL}/predictions?page=0&size=12&scope=${scope}`, {
         headers: {
           ...getAuthHeaders(),
         },
@@ -91,6 +107,95 @@ function PredictionDashboard({ modelKey, modelName, title, description, accent =
       setHistoryLoading(false);
     }
   };
+
+  const fetchStats = async () => {
+    setStatsLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/predictions/stats?scope=${scope}`, {
+        headers: {
+          ...getAuthHeaders(),
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Stats request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      setStats(data);
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to load stats');
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const handleReviewDraftChange = (predictionId, field, value) => {
+    setReviewDrafts((current) => ({
+      ...current,
+      [predictionId]: {
+        reviewStatus: current[predictionId]?.reviewStatus || 'REVIEWED',
+        reviewNotes: current[predictionId]?.reviewNotes || '',
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleReviewSave = async (predictionId) => {
+    const draft = reviewDrafts[predictionId] || { reviewStatus: 'REVIEWED', reviewNotes: '' };
+    setSavingReviewId(predictionId);
+    try {
+      const response = await fetch(`${API_BASE_URL}/predictions/${predictionId}/review`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(draft),
+      });
+      if (!response.ok) throw new Error(`Review update failed with status ${response.status}`);
+      const updated = await response.json();
+      setHistory((current) => current.map((item) => (item.id === predictionId ? updated : item)));
+    } catch (e) {
+      setErrorMessage(e.message || 'Unable to save review');
+    } finally {
+      setSavingReviewId(null);
+    }
+  };
+
+  const handleEmailDraftChange = (predictionId, field, value) => {
+    setEmailDrafts((current) => ({
+      ...current,
+      [predictionId]: {
+        subject: current[predictionId]?.subject || 'Your diabetic retinopathy report',
+        message: current[predictionId]?.message || '',
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleSendEmail = async (predictionId) => {
+    const draft = emailDrafts[predictionId] || { subject: 'Your diabetic retinopathy report', message: '' };
+    setSendingEmailId(predictionId);
+    try {
+      const response = await fetch(`${API_BASE_URL}/predictions/${predictionId}/email-report`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(draft),
+      });
+      if (!response.ok) throw new Error(`Email send failed with status ${response.status}`);
+    } catch (e) {
+      setErrorMessage(e.message || 'Unable to send report email');
+    } finally {
+      setSendingEmailId(null);
+    }
+  };
+
+
 
   const handleImageUpload = (event) => {
     const file = event.target.files?.[0];
@@ -151,6 +256,7 @@ function PredictionDashboard({ modelKey, modelName, title, description, accent =
         modelName,
       });
       await fetchHistory();
+      await fetchStats();
     } catch (error) {
       setErrorMessage(error.message || 'Prediction failed');
     } finally {
@@ -167,9 +273,27 @@ function PredictionDashboard({ modelKey, modelName, title, description, accent =
           </span>
           <h1 className="mt-4 text-5xl font-bold text-gray-900 dark:text-white">{title}</h1>
           <p className="mx-auto mt-4 max-w-3xl text-lg text-gray-600 dark:text-gray-300">{description}</p>
+          {canSeeAll && (
+            <div className="mt-5 flex justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setScope('mine')}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold ${scope === 'mine' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-white/70 text-slate-900 dark:bg-gray-800 dark:text-white'}`}
+              >
+                My data
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope('all')}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold ${scope === 'all' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-white/70 text-slate-900 dark:bg-gray-800 dark:text-white'}`}
+              >
+                All patients
+              </button>
+            </div>
+          )}
           <div className="mt-5">
             <Link
-              to="/predictions-history"
+              to={canSeeAll ? "/predictions-history?scope=all&show=predictions" : "/predictions-history"}
               className={`inline-flex items-center rounded-xl bg-gradient-to-r px-5 py-3 text-sm font-semibold text-white shadow-lg transition ${styles.button}`}
             >
               View Full History
@@ -177,7 +301,43 @@ function PredictionDashboard({ modelKey, modelName, title, description, accent =
           </div>
         </div>
 
-        <div className="mb-8 rounded-3xl border border-gray-200 bg-white p-8 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+        <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {[
+            { label: 'Total', value: stats?.totalPredictions ?? 0 },
+            { label: 'Pending', value: stats?.pendingReviewCount ?? 0 },
+            { label: 'Reviewed', value: stats?.reviewedCount ?? 0 },
+            { label: 'Confirmed', value: stats?.confirmedCount ?? 0 },
+            { label: 'Rejected', value: stats?.rejectedCount ?? 0 },
+          ].map((item) => (
+            <div key={item.label} className="rounded-3xl border border-gray-200 bg-white p-6 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{item.label}</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{statsLoading ? '...' : item.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {stats && (
+          <div className="mb-8 rounded-3xl border border-gray-200 bg-white p-8 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Model Usage</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Scope: {stats.scope}</p>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Latest prediction: {formatDate(stats.latestPredictionAt)}</p>
+            </div>
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              {Object.entries(stats.modelUsage || {}).map(([key, value]) => (
+                <div key={key} className="rounded-2xl bg-gray-50 p-4 dark:bg-gray-900/40">
+                  <p className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400">{key}</p>
+                  <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!canSeeAll && (
+          <div className="mb-8 rounded-3xl border border-gray-200 bg-white p-8 shadow-xl dark:border-gray-700 dark:bg-gray-800">
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -216,7 +376,8 @@ function PredictionDashboard({ modelKey, modelName, title, description, accent =
               {loading ? 'Analyzing...' : 'Run Prediction'}
             </button>
           </div>
-        </div>
+          </div>
+        )}
 
         {errorMessage && (
           <div className="mb-8 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200">
@@ -236,6 +397,7 @@ function PredictionDashboard({ modelKey, modelName, title, description, accent =
                 />
               )}
               <div className="mt-6 space-y-3 text-gray-700 dark:text-gray-200">
+                <p><span className="font-semibold">Patient:</span> {result.patientName || result.username || 'N/A'}</p>
                 <p><span className="font-semibold">Class:</span> {result.className || 'Unknown'}</p>
                 <p><span className="font-semibold">Class ID:</span> {result.classId ?? 'N/A'}</p>
                 <p><span className="font-semibold">Confidence:</span> {formatConfidence(result.confidence)}</p>
@@ -302,7 +464,14 @@ function PredictionDashboard({ modelKey, modelName, title, description, accent =
                       </span>
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-300">Confidence: {formatConfidence(item.confidence)}</p>
+                    {canSeeAll && item.patientName && (
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        Patient: {item.patientName} ({item.username}) {item.patientEmail ? `| ${item.patientEmail}` : ''}
+                      </p>
+                    )}
                     <p className="text-sm text-gray-500 dark:text-gray-400">{formatDate(item.createdAt)}</p>
+
+                    {/* Admin review/email controls intentionally only shown in All History view */}
                   </div>
                 </div>
               ))

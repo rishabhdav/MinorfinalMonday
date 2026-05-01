@@ -4,11 +4,11 @@ import com.example.Project20.entity.UserRole;
 import lombok.Builder;
 import lombok.Data;
 
+import java.time.Instant;
+
 @Data
 @Builder
-public class AuthResponseDto {
-    private String accessToken;
-    private String tokenType;
+public class UserProfileDto {
     private String username;
     private String email;
     private UserRole role;
@@ -17,4 +17,5 @@ public class AuthResponseDto {
     private String gender;
     private String phoneNumber;
     private String address;
+    private Instant createdAt;
 }

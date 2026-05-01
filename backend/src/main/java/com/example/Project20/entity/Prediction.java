@@ -1,12 +1,17 @@
 package com.example.Project20.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
 
-@Entity
-@Table(name = "predictions")
+@Document(collection = "predictions")
 @Getter
 @Setter
 @Builder
@@ -15,53 +20,41 @@ import java.time.Instant;
 public class Prediction {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @Column(nullable = false)
-    private String imageUrl;
+    @Indexed
+    private String username;
 
-    @Column(nullable = false)
-    private String cloudinaryPublicId;
+    private byte[] imageData;
 
-    @Column(nullable = false)
+    private String imageContentType;
+
     private Integer classId;
 
-    @Column(nullable = false)
     private String className;
 
-    @Column(nullable = false)
     private Double confidence;
 
-    @Column(nullable = false, length = 64)
+    @Indexed
     private String modelName;
 
-    @Lob
-    @Column(nullable = false, columnDefinition = "TEXT")
     private String probabilities;
 
-    @Column(nullable = false, updatable = false)
+    @Indexed
     private Instant createdAt;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 32)
     private ReviewStatus reviewStatus;
 
-    @Lob
-    @Column(columnDefinition = "TEXT")
     private String reviewNotes;
 
     private String reviewedBy;
 
     private Instant reviewedAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
-
-    @PrePersist
     public void prePersist() {
-        this.createdAt = Instant.now();
+        if (this.createdAt == null) {
+            this.createdAt = Instant.now();
+        }
         if (this.reviewStatus == null) {
             this.reviewStatus = ReviewStatus.PENDING_REVIEW;
         }

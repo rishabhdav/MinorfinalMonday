@@ -45,6 +45,8 @@ const AuthContext = createContext({
   error: null,
   login: async () => {},
   register: async () => {},
+  updateProfile: async () => {},
+  refreshProfile: async () => {},
   logout: () => {},
   clearError: () => {},
   getAuthHeaders: () => ({}),
@@ -133,6 +135,17 @@ export const AuthProvider = ({ children }) => {
 
   const isAuthenticated = Boolean(user && token);
 
+  const buildUserFromResponse = useCallback((data) => ({
+    username: data.username,
+    email: data.email,
+    role: data.role,
+    fullName: data.fullName,
+    age: data.age,
+    gender: data.gender,
+    phoneNumber: data.phoneNumber,
+    address: data.address,
+  }), []);
+
   const login = useCallback(async ({ username, password }) => {
     setIsLoading(true);
     setError(null);
@@ -163,10 +176,11 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Received an expired access token');
       }
 
-      setUser({ username });
+      const nextUser = buildUserFromResponse(data);
+      setUser(nextUser);
       setToken(data.accessToken);
 
-      return { success: true, user: { username }, token: data.accessToken };
+      return { success: true, user: nextUser, token: data.accessToken };
     } catch (err) {
       const errorMessage = err.message || 'An error occurred during login';
       setError(errorMessage);
@@ -175,9 +189,9 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [buildUserFromResponse]);
 
-  const register = useCallback(async ({ username, email, password }) => {
+  const register = useCallback(async ({ username, email, password, fullName, age, gender, phoneNumber, address }) => {
     setIsLoading(true);
     setError(null);
 
@@ -187,7 +201,7 @@ export const AuthProvider = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, email, password }),
+        body: JSON.stringify({ username, email, password, fullName, age, gender, phoneNumber, address }),
       });
 
       if (!response.ok) {
@@ -207,10 +221,11 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Received an expired access token');
       }
 
-      setUser({ username, email });
+      const nextUser = buildUserFromResponse(data);
+      setUser(nextUser);
       setToken(data.accessToken);
 
-      return { success: true, user: { username, email }, token: data.accessToken };
+      return { success: true, user: nextUser, token: data.accessToken };
     } catch (err) {
       const errorMessage = err.message || 'An error occurred during registration';
       setError(errorMessage);
@@ -219,7 +234,52 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [buildUserFromResponse]);
+
+  const refreshProfile = useCallback(async () => {
+    if (!token || isTokenExpired(token)) {
+      return null;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/profile`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Profile request failed with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    const nextUser = buildUserFromResponse(data);
+    setUser(nextUser);
+    return nextUser;
+  }, [buildUserFromResponse, token]);
+
+  const updateProfile = useCallback(async (profileData) => {
+    if (!token || isTokenExpired(token)) {
+      throw new Error('You must be logged in to update your profile');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/profile`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(profileData),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Profile update failed with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    const nextUser = buildUserFromResponse(data);
+    setUser(nextUser);
+    return nextUser;
+  }, [buildUserFromResponse, token]);
 
   const logout = useCallback(() => {
     setUser(null);
@@ -248,6 +308,8 @@ export const AuthProvider = ({ children }) => {
     error,
     login,
     register,
+    updateProfile,
+    refreshProfile,
     logout,
     clearError,
     getAuthHeaders,

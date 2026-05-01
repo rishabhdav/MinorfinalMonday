@@ -10,7 +10,12 @@ import java.util.List;
 @Data
 @Builder
 public class PredictionResultDto {
-    private Long id;
+    private String id;
+    private String username;
+    private String patientEmail;
+    private String patientName;
+    private Integer patientAge;
+    private String patientGender;
     private String imageUrl;
     private String modelName;
     private Integer classId;

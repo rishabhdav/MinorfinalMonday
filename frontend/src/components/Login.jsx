@@ -24,8 +24,9 @@ const Login = () => {
     }
 
     try {
-      await login({ username: formData.username, password: formData.password });
-      navigate(redirectTo, { replace: true });
+      const result = await login({ username: formData.username, password: formData.password });
+      const nextPath = location.state?.from?.pathname || (result?.user?.role === 'ADMIN' ? '/admin' : '/cnn-retinanet');
+      navigate(nextPath, { replace: true });
     } catch (err) {
       setError(err.message || 'Login failed');
     }

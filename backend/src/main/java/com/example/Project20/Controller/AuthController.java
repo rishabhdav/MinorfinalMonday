@@ -3,6 +3,7 @@ package com.example.Project20.Controller;
 import com.example.Project20.DTO.AuthRequestDto;
 import com.example.Project20.DTO.AuthResponseDto;
 import com.example.Project20.entity.User;
+import com.example.Project20.entity.UserRole;
 import com.example.Project20.repository.UserRepository;
 import com.example.Project20.security.CustomUserDetailsService;
 import com.example.Project20.security.JwtUtils;
@@ -19,6 +20,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.Instant;
 
 @RestController
 @RequestMapping("/api")
@@ -40,10 +43,9 @@ public class AuthController {
             );
             UserDetails userDetails = userDetailsService.loadUserByUsername(request.getUsername());
             String token = jwtUtils.generateToken(userDetails.getUsername());
-            return ResponseEntity.ok(AuthResponseDto.builder()
-                    .accessToken(token)
-                    .tokenType("Bearer")
-                    .build());
+            User user = userRepository.findByUsername(request.getUsername())
+                    .orElseThrow();
+            return ResponseEntity.ok(buildAuthResponse(user, token));
         } catch (AuthenticationException ex) {
             return ResponseEntity.status(401).body(AuthResponseDto.builder()
                     .accessToken(null)
@@ -60,19 +62,44 @@ public class AuthController {
                     .tokenType("Bearer")
                     .build());
         }
+        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
+            return ResponseEntity.status(409).body(AuthResponseDto.builder()
+                    .accessToken(null)
+                    .tokenType("Bearer")
+                    .build());
+        }
 
         User user = User.builder()
                 .username(request.getUsername())
                 .email(request.getEmail())
+                .fullName(request.getFullName())
+                .age(request.getAge())
+                .gender(request.getGender())
+                .phoneNumber(request.getPhoneNumber())
+                .address(request.getAddress())
+                .role(UserRole.PATIENT)
+                .createdAt(Instant.now())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .build();
 
         userRepository.save(user);
 
         String token = jwtUtils.generateToken(user.getUsername());
-        return ResponseEntity.ok(AuthResponseDto.builder()
+        return ResponseEntity.ok(buildAuthResponse(user, token));
+    }
+
+    private AuthResponseDto buildAuthResponse(User user, String token) {
+        return AuthResponseDto.builder()
                 .accessToken(token)
                 .tokenType("Bearer")
-                .build());
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .role(user.getRole())
+                .fullName(user.getFullName())
+                .age(user.getAge())
+                .gender(user.getGender())
+                .phoneNumber(user.getPhoneNumber())
+                .address(user.getAddress())
+                .build();
     }
 }
